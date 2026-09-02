@@ -1,8 +1,8 @@
 """Notification des nouvelles offres d'emploi via Telegram et/ou Email.
 
 Configuration via variables d'environnement :
-- TELEGRAM (recommandé) : TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-- EMAIL (optionnel) : SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO
+- TELEGRAM : TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+- EMAIL : Seuls SMTP_USER et SMTP_PASSWORD sont requis ! (SMTP_HOST, EMAIL_FROM, EMAIL_TO sont déduits automatiquement).
 """
 
 from __future__ import annotations
@@ -24,8 +24,6 @@ def _send_telegram(jobs: list[JobPosting], token: str, chat_id: str) -> None:
     """Envoie un message formaté sur Telegram."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     
-    # Telegram a une limite de 4096 caractères par message.
-    # On découpe les offres par paquets de 10 si besoin.
     chunk_size = 10
     for i in range(0, len(jobs), chunk_size):
         chunk = jobs[i : i + chunk_size]
@@ -55,17 +53,30 @@ def _send_telegram(jobs: list[JobPosting], token: str, chat_id: str) -> None:
 
 
 def _send_email(jobs: list[JobPosting]) -> None:
-    """Envoie un email récapitulatif."""
-    smtp_host = os.environ.get("SMTP_HOST")
+    """Envoie un email récapitulatif avec autodétection des serveurs."""
     smtp_user = os.environ.get("SMTP_USER")
     smtp_password = os.environ.get("SMTP_PASSWORD")
-    email_to = os.environ.get("EMAIL_TO")
 
-    if not (smtp_host and smtp_user and smtp_password and email_to):
+    if not (smtp_user and smtp_password):
+        logger.warning("SMTP_USER ou SMTP_PASSWORD manquant.")
         return
+
+    # Autodétection intelligente du serveur SMTP selon l'adresse email
+    smtp_host = os.environ.get("SMTP_HOST")
+    if not smtp_host:
+        user_lower = smtp_user.lower()
+        if "gmail.com" in user_lower:
+            smtp_host = "smtp.gmail.com"
+        elif any(domain in user_lower for domain in ["icloud.com", "me.com", "mac.com"]):
+            smtp_host = "smtp.mail.me.com"
+        elif any(domain in user_lower for domain in ["outlook.com", "hotmail.com", "live.com"]):
+            smtp_host = "smtp.office365.com"
+        else:
+            smtp_host = "smtp.mail.me.com"
 
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     email_from = os.environ.get("EMAIL_FROM", smtp_user)
+    email_to = os.environ.get("EMAIL_TO", smtp_user)
 
     lines = [f"{len(jobs)} nouvelle(s) offre(s) correspondant à ton profil :\n"]
     for job in jobs:
@@ -76,7 +87,7 @@ def _send_email(jobs: list[JobPosting]) -> None:
     msg = MIMEMultipart()
     msg["From"] = email_from
     msg["To"] = email_to
-    msg["Subject"] = f"[Veille emploi] {len(jobs)} nouvelle(s) offre(s)"
+    msg["Subject"] = f"[Veille emploi LinkedIn] {len(jobs)} nouvelle(s) offre(s)"
     msg.attach(MIMEText("\n".join(lines), "plain", "utf-8"))
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
@@ -84,7 +95,7 @@ def _send_email(jobs: list[JobPosting]) -> None:
         server.login(smtp_user, smtp_password)
         server.sendmail(email_from, [email_to], msg.as_string())
 
-    logger.info("Email envoyé avec %d offre(s).", len(jobs))
+    logger.info("Email envoyé avec succès à %s (%d offre(s)).", email_to, len(jobs))
 
 
 def send_notification(jobs: list[JobPosting]) -> None:
@@ -104,8 +115,7 @@ def send_notification(jobs: list[JobPosting]) -> None:
         except Exception as exc:
             logger.error("Échec notification Telegram : %s", exc)
 
-    # Fallback ou complément par email
-    if os.environ.get("SMTP_USER"):
+    if os.environ.get("SMTP_USER") and os.environ.get("SMTP_PASSWORD"):
         try:
             _send_email(jobs)
             sent = True
@@ -114,5 +124,5 @@ def send_notification(jobs: list[JobPosting]) -> None:
 
     if not sent:
         logger.warning(
-            "Aucun canal de notification configuré (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ou SMTP_USER)."
+            "Aucun canal de notification configuré (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ou SMTP_USER/SMTP_PASSWORD)."
         )
