@@ -1,0 +1,71 @@
+# Mots-clés de filtrage — une offre est retenue si son titre OU sa
+# description contient au moins un de ces termes (recherche insensible
+# à la casse et aux accents).
+#
+# IMPORTANT : éviter les termes trop génériques comme "stage" ou "analyst"
+# seuls — préférer des combinaisons spécifiques au domaine finance.
+
+# --- Métier / rôle (finance) ---
+gérant de portefeuille
+portfolio manager
+gérant obligataire
+fixed income portfolio manager
+analyste crédit
+credit analyst
+fixed income analyst
+trader obligataire
+fixed income trader
+assistant gérant
+junior portfolio manager
+gérant taux
+rates portfolio manager
+rates trader
+portfolio analyst
+investment analyst
+quantitative analyst
+risk analyst
+fund analyst
+
+# --- Domaine (finance / gestion d'actifs) ---
+gestion obligataire
+fixed income
+asset management
+gestion d'actifs
+front office
+gestion de portefeuille
+high yield
+investment grade
+multi-asset
+gestion diversifiée
+global macro
+total return
+absolute return
+buy side
+
+# --- Stages/Junior spécifiques à la finance ---
+stage gestion
+stage trading
+stage fixed income
+stage crédit
+stage taux
+stage front office
+stage portfolio
+stage fund
+stage risk
+stage asset
+stage investissement
+stagiaire gérant
+stagiaire analyste
+intern fund
+intern portfolio
+intern fixed income
+intern credit
+intern trading
+intern risk
+intern investment
+alternance gestion
+alternance finance
+alternance front office
+graduate analyst
+trainee analyst
+junior analyst

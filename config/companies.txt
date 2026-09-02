@@ -1,0 +1,57 @@
+# OPTIONNEL — laisser ce fichier vide (ou tout en commentaire) pour ne
+# PAS filtrer par entreprise : tu recevras alors toute offre finance de
+# marché matchant tes mots-clés sur LinkedIn, peu importe l'entreprise.
+#
+# Pour resserrer strictement sur tes cibles, décommente/complète la liste
+# ci-dessous (une entreprise par ligne). Le matching se fait sur le nom
+# d'entreprise renvoyé par LinkedIn, insensible à la casse — un simple
+# "contient" (ex: "Amundi" matchera "Amundi Asset Management").
+#
+# Amundi
+# BNP Paribas Asset Management
+# Natixis Investment Managers
+# Ostrum Asset Management
+# Carmignac
+# La Française AM
+# Lazard Frères Gestion
+# Tikehau Capital
+# DNCA Finance
+# Sycomore Asset Management
+# La Financière de l'Échiquier
+# CPR Asset Management
+# Groupama Asset Management
+# Oddo BHF Asset Management
+# Candriam
+# Mandarine Gestion
+# Sanso Investment Solutions
+# Montpensier Finance
+# La Banque Postale Asset Management
+# Sienna Investment Managers
+# Federal Finance Gestion
+# Vega Investment Managers
+# Generali Investments
+# Swiss Life Asset Managers
+# Allianz Global Investors
+# Aviva Investors
+# Muzinich
+# Neuberger Berman
+# Pictet Asset Management
+# Schroders
+# M&G Investments
+# Fidelity International
+# PIMCO
+# BlueBay Asset Management
+# Legal & General Investment Management
+# BlackRock
+# Insight Investment
+# Janus Henderson
+# abrdn
+# Lombard Odier
+# UBS Asset Management
+# Union Bancaire Privée
+# Unigestion
+# Western Asset Management
+# Wellington Management
+# Capital Group
+# Loomis Sayles
+# T. Rowe Price

@@ -1,0 +1,45 @@
+name: Veille emploi LinkedIn
+
+on:
+  schedule:
+    # GitHub Actions cron est en UTC. Paris = UTC+1 (hiver) ou UTC+2 (été).
+    # Cibles heure de Paris : 10h, 12h, 14h, 16h, 18h, 20h
+    # - Heure d'été (UTC+2) : 8h, 10h, 12h, 14h, 16h, 18h UTC
+    # - Heure d'hiver (UTC+1) : 9h, 11h, 13h, 15h, 17h, 19h UTC
+    - cron: '0 8,10,12,14,16,18 * * *'   # 10h, 12h, 14h, 16h, 18h, 20h (Paris - été)
+    - cron: '0 9,11,13,15,17,19 * * *'   # 10h, 12h, 14h, 16h, 18h, 20h (Paris - hiver)
+  workflow_dispatch: {}  # permet de lancer le run manuellement depuis GitHub
+
+permissions:
+  contents: write  # nécessaire pour committer seen_offers.json
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Lancer le scraper
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python main.py
+
+      - name: Committer la mémoire anti-doublons
+        run: |
+          git config user.name "job-scraper-bot"
+          git config user.email "actions@github.com"
+          git add seen_offers.json
+          git diff --staged --quiet || git commit -m "Mise à jour seen_offers.json [skip ci]"
+          git push

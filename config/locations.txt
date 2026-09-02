@@ -1,0 +1,10 @@
+# Une ville/région par ligne. Utilisé tel quel dans le paramètre
+# "location" de la recherche LinkedIn. Ajouter/retirer une ligne pour
+# élargir ou resserrer la zone géographique — pas de code à modifier.
+
+Paris, Île-de-France, France
+London, England, United Kingdom
+Geneva, Switzerland
+New York, United States
+Boston, United States
+Newport Beach, California, United States
