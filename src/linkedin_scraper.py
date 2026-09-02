@@ -38,16 +38,14 @@ HEADERS = {
     "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Délai entre deux requêtes HTTP (secondes) — volontairement prudent.
-REQUEST_DELAY_SECONDS = 2.5
+# Délai entre deux requêtes HTTP (secondes).
+REQUEST_DELAY_SECONDS = 0.5
 
-# Nombre de résultats par page (LinkedIn pagine par lots de 10 sur cet
-# endpoint public).
+# Nombre de résultats par page (LinkedIn pagine par lots de 10 sur cet endpoint public).
 PAGE_SIZE = 10
 
-# Nombre maximum de pages parcourues par combinaison mot-clé x ville,
-# pour éviter de scanner des centaines de pages à chaque run.
-MAX_PAGES_PER_QUERY = 3
+# Nombre maximum de pages parcourues par combinaison mot-clé x ville (1 page = 10 plus récentes offres).
+MAX_PAGES_PER_QUERY = 1
 
 
 @dataclass
@@ -132,7 +130,7 @@ def _fetch_job_description(job: JobPosting, session: requests.Session) -> str:
 def search_jobs(
     keywords: Iterable[str],
     locations: Iterable[str],
-    fetch_descriptions: bool = True,
+    fetch_descriptions: bool = False,
 ) -> list[JobPosting]:
     """
     Lance une recherche pour chaque combinaison (mot-clé, ville) et
