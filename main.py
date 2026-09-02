@@ -1,18 +1,15 @@
 """Orchestration complète : recherche LinkedIn -> filtre -> dédoublonnage
--> notification email.
+-> notification.
 
 Usage :
     python main.py
-
-Variables d'environnement requises (voir README.md) :
-    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO
 """
 
 from __future__ import annotations
 
 import logging
 
-from src.linkedin_scraper import search_jobs
+from src.linkedin_scraper import search_jobs, fetch_job_descriptions
 from src.filter import load_lines, filter_jobs
 from src.dedup import load_seen_ids, save_seen_ids, filter_new_jobs
 from src.notifier import send_notification
@@ -47,11 +44,14 @@ def main() -> None:
     new_jobs = filter_new_jobs(matched_jobs, seen_ids)
 
     logger.info(
-        "%d offres trouvées, %d matchées, %d nouvelles",
+        "%d offres trouvées, %d matchées, %d nouvelles à notifier",
         len(all_jobs), len(matched_jobs), len(new_jobs),
     )
 
-    send_notification(new_jobs)
+    if new_jobs:
+        logger.info("Récupération des descriptions pour les %d nouvelles offres...", len(new_jobs))
+        fetch_job_descriptions(new_jobs)
+        send_notification(new_jobs)
 
     seen_ids.update(job.dedup_key for job in matched_jobs)
     save_seen_ids(SEEN_OFFERS_PATH, seen_ids)

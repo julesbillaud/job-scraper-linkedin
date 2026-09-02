@@ -4,13 +4,6 @@ et non-authentifiée — les mêmes endpoints que ceux utilisés par les
 moteurs de recherche pour indexer les offres LinkedIn.
 
 Aucun login, aucun cookie, aucun compte LinkedIn requis.
-
-Limites connues :
-- Pagination LinkedIn plafonnée à ~1000 résultats par recherche
-  (largement suffisant pour une veille par mots-clés ciblés).
-- LinkedIn peut bloquer une IP en cas de volume/fréquence excessifs :
-  on reste volontairement à un rythme faible (délais entre requêtes,
-  peu de requêtes par run).
 """
 
 from __future__ import annotations
@@ -38,14 +31,14 @@ HEADERS = {
     "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Délai entre deux requêtes HTTP (secondes).
-REQUEST_DELAY_SECONDS = 0.5
+# Délai entre deux requêtes HTTP (secondes) — volontairement prudent.
+REQUEST_DELAY_SECONDS = 2.5
 
 # Nombre de résultats par page (LinkedIn pagine par lots de 10 sur cet endpoint public).
 PAGE_SIZE = 10
 
-# Nombre maximum de pages parcourues par combinaison mot-clé x ville (1 page = 10 plus récentes offres).
-MAX_PAGES_PER_QUERY = 1
+# Nombre maximum de pages parcourues par combinaison mot-clé x ville (3 pages = 30 offres).
+MAX_PAGES_PER_QUERY = 3
 
 
 @dataclass
@@ -67,8 +60,6 @@ def _build_search_url(keyword: str, location: str, start: int) -> str:
         "keywords": keyword,
         "location": location,
         "start": start,
-        # f_TPR=r604800 = offres publiées dans les 7 derniers jours,
-        # suffisant vu qu'on tourne 2x/jour et qu'on dédoublonne ensuite.
         "f_TPR": "r604800",
     }
     return f"{SEARCH_URL}?{urlencode(params)}"
@@ -89,13 +80,11 @@ def _parse_search_results(html: str) -> list[JobPosting]:
             continue
 
         href = link_tag.get("href", "")
-        # L'ID d'offre se trouve dans l'URL, sous la forme .../view/1234567890
         job_id = ""
         if "-" in href:
             tail = href.split("?")[0].rstrip("/").split("-")[-1]
             job_id = tail if tail.isdigit() else ""
         if not job_id:
-            # Fallback : on garde l'URL complète comme clé de dédoublonnage.
             job_id = href.split("?")[0]
 
         postings.append(
@@ -127,14 +116,22 @@ def _fetch_job_description(job: JobPosting, session: requests.Session) -> str:
         return ""
 
 
+def fetch_job_descriptions(jobs: list[JobPosting]) -> None:
+    """Télécharge la description uniquement pour les offres retenues."""
+    session = requests.Session()
+    for job in jobs:
+        if not job.description:
+            job.description = _fetch_job_description(job, session)
+            time.sleep(REQUEST_DELAY_SECONDS)
+
+
 def search_jobs(
     keywords: Iterable[str],
     locations: Iterable[str],
-    fetch_descriptions: bool = False,
 ) -> list[JobPosting]:
     """
-    Lance une recherche pour chaque combinaison (mot-clé, ville) et
-    retourne la liste dédoublonnée des offres trouvées (par job_id).
+    Lance la recherche sur LinkedIn (3 pages max, 2.5s de pause).
+    Ne télécharge PAS les descriptions complètes ici (pour aller vite).
     """
     session = requests.Session()
     seen_ids: set[str] = set()
@@ -164,7 +161,6 @@ def search_jobs(
 
                 postings = _parse_search_results(resp.text)
                 if not postings:
-                    # Plus de résultats, pas la peine de continuer à paginer.
                     break
 
                 for posting in postings:
@@ -175,10 +171,5 @@ def search_jobs(
 
                 time.sleep(REQUEST_DELAY_SECONDS)
 
-    if fetch_descriptions:
-        for job in results:
-            job.description = _fetch_job_description(job, session)
-            time.sleep(REQUEST_DELAY_SECONDS)
-
-    logger.info("Total offres uniques trouvées : %d", len(results))
+    logger.info("Total offres uniques scannées : %d", len(results))
     return results
