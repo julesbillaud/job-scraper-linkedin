@@ -27,7 +27,7 @@ def load_lines(path: str | Path) -> list[str]:
 
 
 def matches_keywords(job: JobPosting, keywords: list[str]) -> bool:
-    haystack = _normalize(f"{job.title} {job.description}")
+    haystack = _normalize(job.title)
     return any(_normalize(kw) in haystack for kw in keywords)
 
 
