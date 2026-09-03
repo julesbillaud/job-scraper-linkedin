@@ -74,7 +74,8 @@ def _send_email(jobs: list[JobPosting]) -> None:
         else:
             smtp_host = "smtp.mail.me.com"
 
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_port_raw = os.environ.get("SMTP_PORT", "").strip()
+    smtp_port = int(smtp_port_raw) if smtp_port_raw else 587
     email_from = os.environ.get("EMAIL_FROM", smtp_user)
     email_to = os.environ.get("EMAIL_TO", smtp_user)
 
