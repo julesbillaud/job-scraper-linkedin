@@ -1,10 +1,14 @@
 # Une ville/région par ligne. Utilisé tel quel dans le paramètre
 # "location" de la recherche LinkedIn. Ajouter/retirer une ligne pour
 # élargir ou resserrer la zone géographique — pas de code à modifier.
+#
+# Chaque ville coûte du temps : 1 ville = 12 requêtes = ~30 s par run.
 
 Paris, Île-de-France, France
 London, England, United Kingdom
 Geneva, Switzerland
-New York, United States
-Boston, United States
-Newport Beach, California, United States
+
+# ─── États-Unis : décommente si tu rouvres la recherche outre-Atlantique ───
+# New York, United States
+# Boston, United States
+# Newport Beach, California, United States
