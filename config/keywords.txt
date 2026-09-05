@@ -1,71 +1,99 @@
-# Mots-clés de filtrage — une offre est retenue si son titre OU sa
-# description contient au moins un de ces termes (recherche insensible
-# à la casse et aux accents).
+# Règles de FILTRAGE des titres d'offres.
+# Une offre est gardée si son titre satisfait AU MOINS UNE règle.
 #
-# IMPORTANT : éviter les termes trop génériques comme "stage" ou "analyst"
-# seuls — préférer des combinaisons spécifiques au domaine finance.
+# Deux formes possibles :
+#   fixed income      -> le titre contient l'expression telle quelle
+#   rates + trader    -> le titre contient "rates" ET "trader", peu importe
+#                        l'ordre et ce qu'il y a entre les deux
+#
+# Le « + » est important : les vrais intitulés sont rarement propres.
+# "Global Rates - Euro STIRT and Cross Currency Trader" est attrapé par
+# « rates + trader », mais serait raté par « rates trader ».
+#
+# Insensible à la casse et aux accents (« crédit » = « credit »).
+# Ce fichier ne coûte RIEN en temps d'exécution : allonge-le sans crainte.
+# Les recherches envoyées à LinkedIn sont dans config/search_queries.txt
+# — c'est CE fichier-là qu'il faut garder court.
 
-# --- Métier / rôle (finance) ---
-gérant de portefeuille
-portfolio manager
-gérant obligataire
-fixed income portfolio manager
-analyste crédit
-credit analyst
-fixed income analyst
-trader obligataire
-fixed income trader
-assistant gérant
-junior portfolio manager
-gérant taux
-rates portfolio manager
-rates trader
-portfolio analyst
-investment analyst
-quantitative analyst
-risk analyst
-fund analyst
-
-# --- Domaine (finance / gestion d'actifs) ---
-gestion obligataire
+# ═══ Cœur de cible : obligataire / taux / crédit ═══
+obligataire
 fixed income
-asset management
-gestion d'actifs
-front office
-gestion de portefeuille
 high yield
 investment grade
+rates + trader
+rates + portfolio
+rates + manager
+taux + gestion
+taux + gerant
+credit + analyst
+credit + analyste
+analyste + credit
+credit + portfolio
+credit + fund
+credit + gestion
+
+# ═══ Gestion de portefeuille ═══
+portfolio + manager
+portfolio + analyst
+portfolio + management
+gerant + portefeuille
+gestion + portefeuille
+assistant + gerant
+adjoint + gerant
+fund + manager
+fund + analyst
+asset + manager
+asset + management
+gestion + actifs
+gestion + fonds
+multi asset
 multi-asset
-gestion diversifiée
+gestion diversifiee
 global macro
-total return
 absolute return
+total return
 buy side
 
-# --- Stages/Junior spécifiques à la finance ---
-stage gestion
-stage trading
-stage fixed income
-stage crédit
-stage taux
-stage front office
-stage portfolio
-stage fund
-stage risk
-stage asset
-stage investissement
-stagiaire gérant
-stagiaire analyste
-intern fund
-intern portfolio
-intern fixed income
-intern credit
-intern trading
-intern risk
-intern investment
-alternance gestion
-alternance finance
-alternance front office
-graduate analyst
-trainee analyst
-junior analyst
+# ═══ Analyse / investissement (front) ═══
+investment + analyst
+investment + manager
+analyste + investissement
+analyste + financier + marche
+front office
+salle + marche
+sales + obligataire
+quantitative + analyst
+quant + analyst
+
+# ═══ Stage / alternance / junior — domaine finance uniquement ═══
+stage + gestion
+stage + trading
+stage + fixed income
+stage + credit
+stage + taux
+stage + portfolio
+stage + fund
+stage + asset
+stage + investissement
+stage + front office
+stage + obligataire
+stagiaire + gerant
+stagiaire + gestion
+alternance + gestion
+alternance + finance
+alternance + asset
+alternance + front office
+alternant + gestion
+intern + portfolio
+intern + fixed income
+intern + credit
+intern + fund
+intern + asset
+intern + investment
+graduate + analyst
+graduate + investment
+trainee + analyst
+junior + portfolio
+junior + analyst + credit
+junior + analyst + investment
+junior + gerant

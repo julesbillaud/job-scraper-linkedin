@@ -1,102 +1,119 @@
-"""Notification des nouvelles offres d'emploi via Telegram et/ou Email.
+"""Notification des nouvelles offres par email (iCloud).
 
-Configuration via variables d'environnement :
-- TELEGRAM : TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-- EMAIL : Seuls SMTP_USER et SMTP_PASSWORD sont requis ! (SMTP_HOST, EMAIL_FROM, EMAIL_TO sont déduits automatiquement).
+Secrets GitHub Actions attendus :
+- SMTP_USER      : ton identifiant Apple (l'adresse complète du compte)
+- SMTP_PASSWORD  : un mot de passe pour application, généré sur
+                   https://account.apple.com  →  Connexion et sécurité
+                   (ce n'est PAS ton mot de passe Apple habituel)
+- EMAIL_TO       : où recevoir les offres (défaut : EMAIL_FROM)
+- EMAIL_FROM     : adresse d'expédition. Apple n'accepte QUE des adresses
+                   rattachées au compte (@icloud.com / @me.com / alias).
+                   Défaut : SMTP_USER — à définir explicitement si ton
+                   identifiant Apple n'est pas une adresse iCloud.
+- SMTP_HOST / SMTP_PORT : optionnels, pour un autre fournisseur.
 """
 
 from __future__ import annotations
 
 import os
+import html
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-import requests
-
 from .linkedin_scraper import JobPosting
 
 logger = logging.getLogger(__name__)
 
-
-def _send_telegram(jobs: list[JobPosting], token: str, chat_id: str) -> None:
-    """Envoie un message formaté sur Telegram."""
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    
-    chunk_size = 10
-    for i in range(0, len(jobs), chunk_size):
-        chunk = jobs[i : i + chunk_size]
-        lines = [f"💼 <b>[LinkedIn] {len(jobs)} nouvelle(s) offre(s)</b>\n"]
-        
-        for job in chunk:
-            lines.append(f"• <b>{job.title}</b>")
-            lines.append(f"  🏢 {job.company} | 📍 {job.location}")
-            lines.append(f"  🔗 <a href='{job.url}'>Voir l'offre</a>\n")
-
-        text = "\n".join(lines)
-        
-        resp = requests.post(
-            url,
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-            },
-            timeout=15,
-        )
-        if resp.status_code != 200:
-            logger.error("Erreur envoi Telegram : %s", resp.text)
-        else:
-            logger.info("Message Telegram envoyé avec succès.")
+ICLOUD_SMTP_HOST = "smtp.mail.me.com"
+ICLOUD_SMTP_PORT = 587
 
 
-def _send_email(jobs: list[JobPosting]) -> None:
-    """Envoie un email récapitulatif avec autodétection des serveurs."""
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-
-    if not (smtp_user and smtp_password):
-        logger.warning("SMTP_USER ou SMTP_PASSWORD manquant.")
-        return
-
-    # Autodétection intelligente du serveur SMTP selon l'adresse email
-    smtp_host = os.environ.get("SMTP_HOST")
-    if not smtp_host:
-        user_lower = smtp_user.lower()
-        if "gmail.com" in user_lower:
-            smtp_host = "smtp.gmail.com"
-        elif any(domain in user_lower for domain in ["icloud.com", "me.com", "mac.com"]):
-            smtp_host = "smtp.mail.me.com"
-        elif any(domain in user_lower for domain in ["outlook.com", "hotmail.com", "live.com"]):
-            smtp_host = "smtp.office365.com"
-        else:
-            smtp_host = "smtp.mail.me.com"
-
-    smtp_port_raw = os.environ.get("SMTP_PORT", "").strip()
-    smtp_port = int(smtp_port_raw) if smtp_port_raw else 587
-    email_from = os.environ.get("EMAIL_FROM", smtp_user)
-    email_to = os.environ.get("EMAIL_TO", smtp_user)
-
-    lines = [f"{len(jobs)} nouvelle(s) offre(s) correspondant à ton profil :\n"]
+def _build_plain_body(jobs: list[JobPosting]) -> str:
+    lines = [f"{len(jobs)} nouvelle(s) offre(s) correspondant à ton profil :", ""]
     for job in jobs:
         lines.append(f"• {job.title} — {job.company} ({job.location})")
         lines.append(f"  {job.url}")
         lines.append("")
+    return "\n".join(lines)
 
-    msg = MIMEMultipart()
+
+def _build_html_body(jobs: list[JobPosting]) -> str:
+    rows = []
+    for job in jobs:
+        rows.append(
+            '<tr>'
+            f'<td style="padding:14px 0;border-bottom:1px solid #e5e5e5;">'
+            f'<a href="{html.escape(job.url, quote=True)}" '
+            'style="font-size:15px;font-weight:600;color:#0a66c2;'
+            'text-decoration:none;">'
+            f'{html.escape(job.title)}</a>'
+            '<div style="font-size:13px;color:#555;margin-top:4px;">'
+            f'{html.escape(job.company)}'
+            f'{" &middot; " + html.escape(job.location) if job.location else ""}'
+            '</div>'
+            '</td></tr>'
+        )
+    return (
+        '<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;'
+        'max-width:640px;margin:0 auto;padding:8px 16px;">'
+        f'<p style="font-size:16px;font-weight:600;margin:0 0 4px;">'
+        f'{len(jobs)} nouvelle(s) offre(s)</p>'
+        '<p style="font-size:13px;color:#777;margin:0 0 8px;">'
+        'Veille LinkedIn &middot; offres publiées ces 48 dernières heures</p>'
+        f'<table style="width:100%;border-collapse:collapse;">{"".join(rows)}</table>'
+        '</div>'
+    )
+
+
+def _send_email(jobs: list[JobPosting]) -> None:
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    smtp_password = os.environ.get("SMTP_PASSWORD", "").strip()
+
+    if not (smtp_user and smtp_password):
+        raise RuntimeError(
+            "Secrets manquants : "
+            f"SMTP_USER={'défini' if smtp_user else 'MANQUANT'}, "
+            f"SMTP_PASSWORD={'défini' if smtp_password else 'MANQUANT'}"
+        )
+
+    smtp_host = os.environ.get("SMTP_HOST", "").strip() or ICLOUD_SMTP_HOST
+    smtp_port_raw = os.environ.get("SMTP_PORT", "").strip()
+    smtp_port = int(smtp_port_raw) if smtp_port_raw else ICLOUD_SMTP_PORT
+    email_from = os.environ.get("EMAIL_FROM", "").strip() or smtp_user
+    email_to = os.environ.get("EMAIL_TO", "").strip() or email_from
+
+    msg = MIMEMultipart("alternative")
     msg["From"] = email_from
     msg["To"] = email_to
-    msg["Subject"] = f"[Veille emploi LinkedIn] {len(jobs)} nouvelle(s) offre(s)"
-    msg.attach(MIMEText("\n".join(lines), "plain", "utf-8"))
+    msg["Subject"] = f"[Veille LinkedIn] {len(jobs)} nouvelle(s) offre(s)"
+    msg.attach(MIMEText(_build_plain_body(jobs), "plain", "utf-8"))
+    msg.attach(MIMEText(_build_html_body(jobs), "html", "utf-8"))
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_password)
-        server.sendmail(email_from, [email_to], msg.as_string())
+    logger.info("Envoi via %s:%d — de %s vers %s",
+                smtp_host, smtp_port, email_from, email_to)
 
-    logger.info("Email envoyé avec succès à %s (%d offre(s)).", email_to, len(jobs))
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(email_from, [email_to], msg.as_string())
+    except smtplib.SMTPAuthenticationError as exc:
+        raise RuntimeError(
+            "Authentification refusée par Apple. Vérifie que SMTP_PASSWORD "
+            "est bien un « mot de passe pour application » (account.apple.com "
+            "→ Connexion et sécurité), et non ton mot de passe Apple habituel. "
+            f"Détail : {exc}"
+        ) from exc
+    except smtplib.SMTPSenderRefused as exc:
+        raise RuntimeError(
+            f"Apple refuse d'expédier depuis « {email_from} ». Définis le "
+            "secret EMAIL_FROM avec une adresse rattachée à ton compte "
+            f"(@icloud.com, @me.com ou un alias). Détail : {exc}"
+        ) from exc
+
+    logger.info("Email envoyé à %s (%d offre(s)).", email_to, len(jobs))
 
 
 def send_notification(jobs: list[JobPosting]) -> None:
@@ -104,41 +121,6 @@ def send_notification(jobs: list[JobPosting]) -> None:
         logger.info("Aucune nouvelle offre, pas de notification envoyée.")
         return
 
-    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-
-    sent = False
-
-    if telegram_token and telegram_chat_id:
-        try:
-            _send_telegram(jobs, telegram_token, telegram_chat_id)
-            sent = True
-        except Exception as exc:
-            logger.error("Échec notification Telegram : %s", exc)
-
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-
-    if smtp_user and smtp_password:
-        logger.info(
-            "Tentative d'envoi email via %s (domaine: %s)...",
-            smtp_user.split("@")[-1] if "@" in smtp_user else "inconnu",
-            smtp_user.split("@")[-1] if "@" in smtp_user else "inconnu",
-        )
-        try:
-            _send_email(jobs)
-            sent = True
-        except Exception as exc:
-            logger.error("Échec notification Email : %s", exc, exc_info=True)
-            raise  # ← Crash volontaire pour que GitHub Actions signale l'erreur (croix rouge)
-    else:
-        logger.warning(
-            "SMTP_USER=%s, SMTP_PASSWORD=%s — secrets manquants.",
-            "✓ défini" if smtp_user else "✗ MANQUANT",
-            "✓ défini" if smtp_password else "✗ MANQUANT",
-        )
-
-    if not sent:
-        logger.warning(
-            "Aucun canal de notification configuré (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ou SMTP_USER/SMTP_PASSWORD)."
-        )
+    # Volontairement non rattrapé : si l'email échoue, le run doit
+    # apparaître en rouge dans GitHub Actions plutôt que d'échouer en silence.
+    _send_email(jobs)

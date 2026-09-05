@@ -1,0 +1,53 @@
+# Règles d'EXCLUSION — le dernier filet, appliqué en dernier.
+# Si le titre d'une offre satisfait une règle ici, elle est jetée MÊME si
+# elle correspondait à un mot-clé de keywords.txt.
+#
+# Même syntaxe que keywords.txt : « a + b » = les deux termes présents.
+#
+# À quoi ça sert : « portfolio manager » attrape de vraies offres de
+# gestion, mais aussi « Motor Portfolio Manager » (assurance auto) ou
+# « Portfolio Manager, Systematic Agriculture ». On les coupe ici plutôt
+# que de restreindre keywords.txt et risquer de rater une vraie offre.
+#
+# Pour désactiver une exclusion : mets un # devant la ligne.
+
+# ─── Mauvais secteur (le mot "portfolio"/"asset" y a un autre sens) ───
+immobilier
+real estate
+insolvency
+motor
+agriculture
+recouvrement
+leasing
+credit bail
+
+# ─── Mauvaise fonction (ni front office, ni gestion) ───
+back office
+middle office
+business analyst
+developpeur
+developer
+software
+ingenieur
+scoring
+data engineer
+comptable
+audit
+conformite
+compliance
+
+# ─── Trop senior : décommente pour ne garder que junior/medior ───
+# directeur
+# director
+# head of
+# managing director
+# vice president
+
+# ─── Autres pistes selon ton ciblage — décommente si trop de bruit ───
+# credit risk
+# risque de credit
+# private equity
+# infrastructure
+# energy
+# equity
+# actions

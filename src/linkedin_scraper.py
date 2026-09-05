@@ -32,18 +32,26 @@ HEADERS = {
     "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Délai entre deux requêtes HTTP (secondes) — volontairement prudent.
-REQUEST_DELAY_SECONDS = 2.5
+# Délai entre deux requêtes HTTP (secondes) — prudent mais pas timide.
+REQUEST_DELAY_SECONDS = 1.5
 
 # Nombre de résultats par page (LinkedIn pagine par lots de 10).
 PAGE_SIZE = 10
 
-# Nombre maximum de pages parcourues par combinaison mot-clé x ville.
-MAX_PAGES_PER_QUERY = 3
+# Nombre maximum de pages parcourues par combinaison requête x ville.
+# 2 pages = 20 offres, largement assez sur une fenêtre de 48h.
+MAX_PAGES_PER_QUERY = 2
 
-# Seuil d'arrêt anticipé : si X offres ou plus sur une page sont déjà
-# connues, on arrête de paginer (les suivantes seront encore plus anciennes).
-EARLY_STOP_THRESHOLD = 5
+# Fenêtre de publication LinkedIn, en secondes. 172800 = 48h.
+# Le script tourne toutes les 2h : 48h laisse une grosse marge de
+# sécurité si un run échoue, sans ramener trop de vieilles offres.
+RECENCY_WINDOW_SECONDS = 172_800
+
+# Seuil d'arrêt anticipé : dès que ce nombre d'offres DÉJÀ VUES apparaît
+# sur une page, on arrête de paginer et on passe à la requête suivante.
+# 1 seule serait trop fragile (une offre connue peut remonter par hasard) ;
+# 3 signifie qu'on est clairement retombé sur du déjà-analysé.
+EARLY_STOP_THRESHOLD = 3
 
 
 @dataclass
@@ -64,8 +72,7 @@ def _build_search_url(keyword: str, location: str, start: int) -> str:
         "keywords": keyword,
         "location": location,
         "start": start,
-        # Offres publiées dans les 7 derniers jours
-        "f_TPR": "r604800",
+        "f_TPR": f"r{RECENCY_WINDOW_SECONDS}",
     }
     return f"{SEARCH_URL}?{urlencode(params)}"
 
@@ -106,41 +113,45 @@ def _parse_search_results(html: str) -> list[JobPosting]:
 
 
 def search_jobs(
-    keywords: Iterable[str],
+    queries: Iterable[str],
     locations: Iterable[str],
     already_seen: set[str] | None = None,
 ) -> list[JobPosting]:
     """
-    Lance une recherche pour chaque combinaison (mot-clé, ville).
+    Lance une recherche pour chaque combinaison (requête, ville).
 
-    Si `already_seen` est fourni, le script s'arrête de paginer dès
-    qu'une page contient ≥ EARLY_STOP_THRESHOLD offres déjà connues
-    (= les résultats suivants seront encore plus anciens, donc inutiles).
+    `queries` vient de config/search_queries.txt — volontairement court.
+    Le tri fin est fait après coup par filter.filter_jobs().
+
+    Si `already_seen` est fourni, on arrête de paginer une combinaison dès
+    qu'une page contient ≥ EARLY_STOP_THRESHOLD offres déjà connues : on
+    est retombé sur du déjà-analysé, la suite sera encore plus ancienne.
     """
     session = requests.Session()
     seen_ids: set[str] = set()
     results: list[JobPosting] = []
     known = already_seen or set()
+    stopped_early = 0
 
-    for keyword in keywords:
+    for query in queries:
         for location in locations:
             for page in range(MAX_PAGES_PER_QUERY):
                 start = page * PAGE_SIZE
-                url = _build_search_url(keyword, location, start)
+                url = _build_search_url(query, location, start)
 
                 try:
                     resp = session.get(url, headers=HEADERS, timeout=15)
                 except requests.RequestException as exc:
                     logger.warning(
                         "Échec requête LinkedIn (%s / %s) : %s",
-                        keyword, location, exc,
+                        query, location, exc,
                     )
                     break
 
                 if resp.status_code != 200:
                     logger.info(
                         "Réponse %s pour '%s' à %s, arrêt pagination.",
-                        resp.status_code, keyword, location,
+                        resp.status_code, query, location,
                     )
                     break
 
@@ -148,27 +159,32 @@ def search_jobs(
                 if not postings:
                     break
 
-                # Compteur d'offres déjà vues sur cette page
+                # Compteur d'offres déjà vues sur cette page. On compte AVANT
+                # le dédoublonnage intra-run : une offre déjà croisée par une
+                # requête précédente reste un signal « terrain déjà couvert ».
                 already_known_count = 0
 
                 for posting in postings:
+                    if posting.job_id in known:
+                        already_known_count += 1
                     if posting.job_id in seen_ids:
                         continue
                     seen_ids.add(posting.job_id)
                     results.append(posting)
 
-                    if posting.job_id in known:
-                        already_known_count += 1
-
-                # Arrêt anticipé si la majorité de la page est déjà connue
+                # Arrêt anticipé : on passe à la requête/ville suivante
                 if already_known_count >= EARLY_STOP_THRESHOLD:
                     logger.info(
-                        "Arrêt anticipé pour '%s' à %s : %d/%d offres déjà vues.",
-                        keyword, location, already_known_count, len(postings),
+                        "Arrêt anticipé '%s' / %s : %d/%d offres déjà vues.",
+                        query, location, already_known_count, len(postings),
                     )
+                    stopped_early += 1
                     break
 
                 time.sleep(REQUEST_DELAY_SECONDS)
 
-    logger.info("Total offres uniques scannées : %d", len(results))
+    logger.info(
+        "Total offres uniques scannées : %d (%d recherches coupées court)",
+        len(results), stopped_early,
+    )
     return results

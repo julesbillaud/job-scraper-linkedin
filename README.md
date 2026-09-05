@@ -8,25 +8,53 @@ d'origine.
 
 Ce projet scanne LinkedIn (sans login, via l'API publique "invité" que
 LinkedIn utilise pour son propre moteur de recherche) à la recherche
-d'offres correspondant à une liste de mots-clés, et envoie un email
-récapitulatif des nouvelles offres deux fois par jour, automatiquement,
+d'offres publiées dans les dernières 48h, et envoie un email
+récapitulatif des nouvelles offres toutes les 2h, automatiquement,
 via GitHub Actions.
 
 ## Structure
 
 ```
 config/
-  keywords.txt    # mots-clés de filtrage (déjà remplis)
-  locations.txt   # villes ciblées (déjà remplies)
-  companies.txt   # filtre optionnel par entreprise (vide = désactivé)
+  search_queries.txt  # ce qu'on DEMANDE à LinkedIn — garder COURT (= vitesse)
+  keywords.txt        # ce qu'on GARDE dans les résultats — long = précis
+  exclude.txt         # ce qu'on JETTE même si ça matchait un mot-clé
+  locations.txt       # villes ciblées
+  companies.txt       # filtre optionnel par entreprise (vide = désactivé)
 src/
   linkedin_scraper.py   # requêtes à l'API guest LinkedIn
-  filter.py              # matching mots-clés / entreprise
+  filter.py              # matching mots-clés / exclusions / entreprise
   dedup.py                # mémoire anti-doublons (seen_offers.json)
-  notifier.py              # envoi email
+  notifier.py              # envoi email (iCloud)
 main.py                    # orchestration
-.github/workflows/scraper.yml   # cron 11h/15h Paris
+.github/workflows/scraper.yml   # cron toutes les 2h
 ```
+
+### Les trois fichiers de config, et pourquoi ils sont séparés
+
+Le coût en temps est **entièrement** porté par `search_queries.txt` :
+1 ligne = 6 villes × 2 pages ≈ 12 requêtes ≈ 30 s. Avec 12 lignes, un run
+dure ~5 min. Mettre 59 termes ici faisait des runs de 60 min.
+
+`keywords.txt` et `exclude.txt` sont **gratuits** : ils trient une liste
+déjà en mémoire. C'est là qu'il faut affiner ce que tu reçois.
+
+```
+LinkedIn ──search_queries──> ~150 offres brutes
+                             ──keywords──> ~35 pertinentes
+                                           ──exclude──> ~30 envoyées
+```
+
+Syntaxe de `keywords.txt` / `exclude.txt` — le `+` signifie « ET » :
+
+```
+fixed income      # le titre contient l'expression telle quelle
+rates + trader    # le titre contient "rates" ET "trader", ordre libre
+```
+
+Le `+` est essentiel : les vrais intitulés sont sales. *"Global Rates -
+Euro STIRT and Cross Currency Trader"* est attrapé par `rates + trader`,
+mais serait raté par `rates trader`.
 
 ## Setup local (pour tester avant de pousser sur GitHub)
 
@@ -35,31 +63,38 @@ python -m venv venv
 source venv/bin/activate  # ou venv\Scripts\activate sous Windows
 pip install -r requirements.txt
 
-export SMTP_HOST=smtp.gmail.com
-export SMTP_PORT=587
-export SMTP_USER=ton.email@gmail.com
-export SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx   # mot de passe d'application Gmail, pas ton mdp normal
-export EMAIL_FROM=ton.email@gmail.com
-export EMAIL_TO=ton.email@gmail.com
+export SMTP_USER=ton.identifiant@apple            # ton identifiant Apple
+export SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx         # mot de passe POUR APPLICATION
+export EMAIL_FROM=ton.adresse@icloud.com         # doit être une adresse du compte
+export EMAIL_TO=ton.adresse@icloud.com
 
 python main.py
 ```
 
-Pour un mot de passe d'application Gmail : compte Google → Sécurité →
-validation en 2 étapes (à activer si pas déjà fait) → "Mots de passe des
-applications".
+`SMTP_HOST` / `SMTP_PORT` sont optionnels : par défaut
+`smtp.mail.me.com:587` (iCloud).
+
+Le mot de passe pour application se génère sur
+[account.apple.com](https://account.apple.com) → Connexion et sécurité →
+Mots de passe pour application. **Ce n'est pas ton mot de passe Apple
+habituel** — celui-ci sera systématiquement refusé.
+
+Piège fréquent : Apple n'accepte d'expédier que depuis une adresse
+rattachée au compte (`@icloud.com`, `@me.com` ou un alias). Si ton
+identifiant Apple est une adresse externe (Gmail par ex.), `SMTP_USER`
+reste cet identifiant mais `EMAIL_FROM` doit être ton adresse iCloud.
 
 ## Setup GitHub Actions (exécution automatique)
 
 1. Pousser ce repo sur GitHub (peut être privé).
 2. Dans les Settings du repo → Secrets and variables → Actions, ajouter
-   les 6 secrets : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`,
-   `EMAIL_FROM`, `EMAIL_TO`.
-3. Le workflow tourne automatiquement à 11h et 15h heure de Paris (voir
-   note DST dans `scraper.yml` — il se déclenche 4x/jour pour couvrir
-   heure d'été et d'hiver sans réglage manuel deux fois par an ; si tu
-   préfères une précision exacte, on peut affiner avec un check
-   `zoneinfo` dans le script plutôt que 4 cron entries).
+   les secrets : `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`
+   (et éventuellement `SMTP_HOST` / `SMTP_PORT` pour un autre
+   fournisseur).
+3. Le workflow tourne toutes les 2h entre 07h et 19h UTC (9h–21h Paris en
+   été, 8h–20h en hiver). Un seul run à la fois (`concurrency`) : deux
+   runs simultanés se marchaient dessus au moment de committer
+   `seen_offers.json`, ce qui faisait échouer le second.
 4. Possible de le lancer manuellement via l'onglet "Actions" → "Run
    workflow" pour tester sans attendre l'horaire programmé.
 

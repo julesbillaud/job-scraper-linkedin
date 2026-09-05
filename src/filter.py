@@ -9,10 +9,17 @@ from .linkedin_scraper import JobPosting
 
 
 def _normalize(text: str) -> str:
-    """Minuscule + suppression des accents, pour un matching robuste."""
+    """
+    Minuscule, sans accents, ponctuation remplacée par des espaces.
+
+    La ponctuation compte : sans ça, « Front-Office » ne matcherait pas
+    la règle « front office », et « Gérant(e) » raterait « gerant ».
+    """
     text = text.lower()
     text = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in text if not unicodedata.combining(c))
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = "".join(c if c.isalnum() else " " for c in text)
+    return " ".join(text.split())
 
 
 def load_lines(path: str | Path) -> list[str]:
@@ -27,8 +34,37 @@ def load_lines(path: str | Path) -> list[str]:
 
 
 def matches_keywords(job: JobPosting, keywords: list[str]) -> bool:
+    """
+    Une offre est retenue si son titre satisfait AU MOINS UNE règle.
+
+    Une règle est soit une expression simple, soit plusieurs termes reliés
+    par « + » qui doivent TOUS être présents, dans n'importe quel ordre :
+
+        fixed income        -> le titre contient "fixed income"
+        rates + trader      -> le titre contient "rates" ET "trader",
+                               même séparés ("Global Rates ... Trader")
+
+    Les titres réels sont rarement formulés exactement comme un intitulé
+    de métier ; le « + » évite de rater une offre pour un mot intercalé.
+    """
     haystack = _normalize(job.title)
-    return any(_normalize(kw) in haystack for kw in keywords)
+    for rule in keywords:
+        parts = [_normalize(p) for p in rule.split("+") if p.strip()]
+        if parts and all(part in haystack for part in parts):
+            return True
+    return False
+
+
+def matches_exclusions(job: JobPosting, exclusions: list[str]) -> bool:
+    """Vrai si le titre déclenche une règle d'exclusion (même syntaxe « + »)."""
+    if not exclusions:
+        return False
+    haystack = _normalize(job.title)
+    for rule in exclusions:
+        parts = [_normalize(p) for p in rule.split("+") if p.strip()]
+        if parts and all(part in haystack for part in parts):
+            return True
+    return False
 
 
 def matches_company(job: JobPosting, companies: list[str]) -> bool:
@@ -43,9 +79,15 @@ def filter_jobs(
     jobs: list[JobPosting],
     keywords: list[str],
     companies: list[str],
+    exclusions: list[str] | None = None,
 ) -> list[JobPosting]:
+    """Garde les offres qui matchent un mot-clé, la liste d'entreprises
+    (si active), et qui ne déclenchent aucune exclusion."""
+    exclusions = exclusions or []
     return [
         job
         for job in jobs
-        if matches_keywords(job, keywords) and matches_company(job, companies)
+        if matches_keywords(job, keywords)
+        and matches_company(job, companies)
+        and not matches_exclusions(job, exclusions)
     ]

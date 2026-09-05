@@ -20,20 +20,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+SEARCH_QUERIES_PATH = "config/search_queries.txt"
 KEYWORDS_PATH = "config/keywords.txt"
 LOCATIONS_PATH = "config/locations.txt"
 COMPANIES_PATH = "config/companies.txt"
+EXCLUDE_PATH = "config/exclude.txt"
 SEEN_OFFERS_PATH = "seen_offers.json"
 
 
 def main() -> None:
+    # Deux listes distinctes, deux rôles :
+    #  - queries   : ce qu'on DEMANDE à LinkedIn (court = rapide)
+    #  - keywords  : ce qu'on GARDE dans les résultats (long = précis)
+    queries = load_lines(SEARCH_QUERIES_PATH)
     keywords = load_lines(KEYWORDS_PATH)
     locations = load_lines(LOCATIONS_PATH)
     companies = load_lines(COMPANIES_PATH)
+    exclusions = load_lines(EXCLUDE_PATH)
 
     logger.info(
-        "Lancement : %d mots-clés x %d villes (filtre entreprise %s)",
-        len(keywords), len(locations),
+        "Lancement : %d recherches x %d villes | %d règles de tri, "
+        "%d exclusions | filtre entreprise %s",
+        len(queries), len(locations), len(keywords), len(exclusions),
         f"actif sur {len(companies)} boîtes" if companies else "désactivé",
     )
 
@@ -41,8 +49,8 @@ def main() -> None:
     # pour permettre l'arrêt anticipé dès qu'on retrouve des offres connues
     seen_ids = load_seen_ids(SEEN_OFFERS_PATH)
 
-    all_jobs = search_jobs(keywords, locations, already_seen=seen_ids)
-    matched_jobs = filter_jobs(all_jobs, keywords, companies)
+    all_jobs = search_jobs(queries, locations, already_seen=seen_ids)
+    matched_jobs = filter_jobs(all_jobs, keywords, companies, exclusions)
     new_jobs = filter_new_jobs(matched_jobs, seen_ids)
 
     logger.info(

@@ -1,0 +1,27 @@
+# REQUÊTES envoyées à LinkedIn (≠ config/keywords.txt qui filtre les titres).
+#
+# Rôle de ce fichier : ratisser large et vite.
+# Chaque ligne = une recherche LinkedIn, lancée pour CHAQUE ville de
+# config/locations.txt. Le tri fin est fait ensuite par keywords.txt.
+#
+# Coût : 1 ligne ici = 6 villes x 2 pages = ~12 requêtes = ~30 secondes.
+# Garder cette liste courte (10-15 lignes). Pour affiner ce que tu
+# RECOIS, modifie plutôt config/keywords.txt : c'est gratuit en temps.
+
+# --- Coeur de cible : obligataire / crédit ---
+fixed income
+gestion obligataire
+credit analyst
+analyste crédit
+
+# --- Métier gestion ---
+portfolio manager
+gérant de portefeuille
+asset management
+gestion d'actifs
+
+# --- Élargissement front office ---
+front office
+buy side
+investment analyst
+multi asset

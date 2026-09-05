@@ -2,34 +2,39 @@ name: Veille emploi LinkedIn
 
 on:
   schedule:
-    # GitHub Actions cron est en UTC. Paris = UTC+1 (hiver) ou UTC+2 (été).
-    # Cibles heure de Paris : 10h, 12h, 14h, 16h, 18h, 20h
-    # - Heure d'été (UTC+2) : 8h, 10h, 12h, 14h, 16h, 18h UTC
-    # - Heure d'hiver (UTC+1) : 9h, 11h, 13h, 15h, 17h, 19h UTC
-    - cron: '0 8,10,12,14,16,18 * * *'   # 10h, 12h, 14h, 16h, 18h, 20h (Paris - été)
-    - cron: '0 9,11,13,15,17,19 * * *'   # 10h, 12h, 14h, 16h, 18h, 20h (Paris - hiver)
+    # Cron GitHub = UTC. Un SEUL cron ici : GitHub déclenche TOUTES les
+    # entrées de cette liste, donc en mettre deux (été + hiver) doublait
+    # le nombre de runs au lieu de s'adapter à l'heure.
+    # Toutes les 2h de 07h à 19h UTC = 9h-21h Paris (été), 8h-20h (hiver).
+    - cron: '0 7-19/2 * * *'
   workflow_dispatch: {}  # permet de lancer le run manuellement depuis GitHub
 
 permissions:
   contents: write  # nécessaire pour committer seen_offers.json
 
+# Un seul run à la fois : deux runs simultanés se marchent dessus au
+# moment de pousser seen_offers.json (push rejeté => croix rouge).
+concurrency:
+  group: veille-linkedin
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # filet de sécurité : un run sain dure ~5 min
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
 
       - name: Installer les dépendances
         run: pip install -r requirements.txt
 
       - name: Lancer le scraper
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -39,9 +44,22 @@ jobs:
         run: python main.py
 
       - name: Committer la mémoire anti-doublons
+        if: always()  # on garde la mémoire même si l'envoi d'email a échoué
         run: |
           git config user.name "job-scraper-bot"
           git config user.email "actions@github.com"
           git add seen_offers.json
-          git diff --staged --quiet || git commit -m "Mise à jour seen_offers.json [skip ci]"
-          git push
+          git diff --staged --quiet && echo "Rien à committer." && exit 0
+          git commit -m "Mise à jour seen_offers.json [skip ci]"
+          # Le dépôt a pu bouger pendant les ~5 min de scraping :
+          # on rejoue notre commit par-dessus avant de pousser.
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "Push réussi (tentative $attempt)."
+              exit 0
+            fi
+            echo "Push rejeté, rebase puis nouvelle tentative..."
+            git pull --rebase --autostash origin main || exit 1
+          done
+          echo "::error::Push impossible après 3 tentatives."
+          exit 1
