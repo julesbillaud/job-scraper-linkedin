@@ -52,6 +52,8 @@ def main() -> None:
 
     if new_jobs:
         send_notification(new_jobs)
+    else:
+        logger.info("⚠️  Aucune nouvelle offre à notifier — pas d'email envoyé.")
 
     # Sauvegarder TOUTES les offres matchées (pas seulement les nouvelles)
     seen_ids.update(job.dedup_key for job in matched_jobs)

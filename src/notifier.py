@@ -116,12 +116,27 @@ def send_notification(jobs: list[JobPosting]) -> None:
         except Exception as exc:
             logger.error("Échec notification Telegram : %s", exc)
 
-    if os.environ.get("SMTP_USER") and os.environ.get("SMTP_PASSWORD"):
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+
+    if smtp_user and smtp_password:
+        logger.info(
+            "Tentative d'envoi email via %s (domaine: %s)...",
+            smtp_user.split("@")[-1] if "@" in smtp_user else "inconnu",
+            smtp_user.split("@")[-1] if "@" in smtp_user else "inconnu",
+        )
         try:
             _send_email(jobs)
             sent = True
         except Exception as exc:
-            logger.error("Échec notification Email : %s", exc)
+            logger.error("Échec notification Email : %s", exc, exc_info=True)
+            raise  # ← Crash volontaire pour que GitHub Actions signale l'erreur (croix rouge)
+    else:
+        logger.warning(
+            "SMTP_USER=%s, SMTP_PASSWORD=%s — secrets manquants.",
+            "✓ défini" if smtp_user else "✗ MANQUANT",
+            "✓ défini" if smtp_password else "✗ MANQUANT",
+        )
 
     if not sent:
         logger.warning(
